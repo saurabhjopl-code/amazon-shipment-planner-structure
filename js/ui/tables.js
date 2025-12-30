@@ -1,100 +1,104 @@
-const PAGE_SIZE = 25;
-const fcState = {};
+/**
+ * Amazon FC Table Renderer (FINAL)
+ * --------------------------------
+ * Always renders FC container
+ * Shows empty-state message if no rows
+ */
 
-export function renderFCTable(fcCode, data) {
-  if (!fcState[fcCode]) {
-    fcState[fcCode] = {
-      visible: PAGE_SIZE,
-      expanded: false, // 🔒 default collapsed
-      data
-    };
-  } else {
-    fcState[fcCode].data = data;
+let FC_RENDER_COUNT = {};
+
+export function renderFCTable(fc, rows) {
+  const container = document.getElementById("amazonFcTables");
+
+  if (!FC_RENDER_COUNT[fc]) {
+    FC_RENDER_COUNT[fc] = 0;
   }
 
-  const container = document.getElementById("amazonFcTables");
-  container.innerHTML = "";
+  const wrapper = document.createElement("div");
+  wrapper.className = "fc-block";
 
-  Object.keys(fcState).forEach(code => {
-    container.appendChild(buildFCBlock(code));
-  });
+  /* ---------- FC HEADER ---------- */
+  const header = document.createElement("div");
+  header.className = "fc-header";
+  header.innerHTML = `
+    <h3>${fc}</h3>
+    <button class="toggle-btn">Expand</button>
+  `;
+  wrapper.appendChild(header);
+
+  /* ---------- TABLE CONTAINER ---------- */
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "fc-table";
+  tableWrap.style.display = "none";
+
+  if (!rows || rows.length === 0) {
+    tableWrap.innerHTML = `
+      <p style="padding:10px;color:#666;">
+        No sellable stock found for this FC
+      </p>
+    `;
+  } else {
+    tableWrap.innerHTML = buildTableHTML(fc, rows);
+  }
+
+  wrapper.appendChild(tableWrap);
+  container.appendChild(wrapper);
+
+  /* ---------- TOGGLE ---------- */
+  header.querySelector(".toggle-btn").onclick = () => {
+    const open = tableWrap.style.display === "block";
+    tableWrap.style.display = open ? "none" : "block";
+    header.querySelector(".toggle-btn").innerText =
+      open ? "Expand" : "Collapse";
+  };
 }
 
-function buildFCBlock(fcCode) {
-  const state = fcState[fcCode];
-  const block = document.createElement("div");
-  block.className = "fc-block";
+/* ===============================
+   TABLE BUILDER
+================================ */
 
-  // FC header
+function buildTableHTML(fc, rows) {
+  const visibleRows = rows.slice(0, 25);
+
   let html = `
-    <div class="fc-title" data-fc="${fcCode}">
-      ▶ Amazon FC: ${fcCode} 
-      <span style="font-weight:normal; font-size:13px;">
-        (${state.data.length} SKUs)
-      </span>
-    </div>
-  `;
-
-  // Expanded content
-  if (state.expanded) {
-    const rows = state.data.slice(0, state.visible);
-
-    html += `
-      <table>
+    <table>
+      <thead>
         <tr>
           <th>Amazon Seller SKU</th>
           <th>30D Sale</th>
           <th>DRR</th>
-          <th>FC 30D Sale</th>
+          <th>FC Stock</th>
+          <th>SC</th>
+          <th>Send Qty</th>
+          <th>Recall Qty</th>
         </tr>
-    `;
+      </thead>
+      <tbody>
+  `;
 
-    rows.forEach(r => {
-      html += `
-        <tr>
-          <td>${r.sku}</td>
-          <td>${r.total30D}</td>
-          <td>${r.drr}</td>
-          <td>${r.fc30D || 0}</td>
-        </tr>
-      `;
-    });
-
+  visibleRows.forEach(r => {
     html += `
-      </table>
+      <tr>
+        <td>${r.sku}</td>
+        <td>${r.total30D ?? 0}</td>
+        <td>${r.drr ?? 0}</td>
+        <td>${r.fcStock ?? 0}</td>
+        <td>${r.sc}</td>
+        <td>${r.sendQty ?? 0}</td>
+        <td>${r.recallQty ?? 0}</td>
+      </tr>
+    `;
+  });
 
-      <div class="fc-actions">
-        <button data-action="show" data-fc="${fcCode}">Show More</button>
-        <button data-action="collapse" data-fc="${fcCode}">Collapse</button>
-        <button data-action="export" data-fc="${fcCode}">Export Current FC</button>
+  html += "</tbody></table>";
+
+  if (rows.length > 25) {
+    html += `
+      <div style="padding:10px;">
+        Showing 25 of ${rows.length} rows
       </div>
     `;
   }
 
-  block.innerHTML = html;
-
-  // Header click → expand / collapse
-  block.querySelector(".fc-title").addEventListener("click", () => {
-    state.expanded = !state.expanded;
-    state.visible = PAGE_SIZE; // reset pagination on toggle
-    renderFCTable(fcCode, state.data);
-  });
-
-  // Button actions (only if expanded)
-  block.querySelectorAll("button").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation(); // prevent header toggle
-
-      const action = btn.dataset.action;
-
-      if (action === "show") state.visible += PAGE_SIZE;
-      if (action === "collapse") state.expanded = false;
-      if (action === "export")
-        alert(`Export for ${fcCode} will be enabled in next phase`);
-
-      renderFCTable(fcCode, state.data);
-    });
-  });
-
-  return block;
+  return html;
 }
