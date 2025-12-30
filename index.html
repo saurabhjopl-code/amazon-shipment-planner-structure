@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Amazon Shipment Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="header">
+    <h1>Amazon Shipment Planner</h1>
+    <p>FC-wise Shipment, Recall & Capacity Planning</p>
+  </header>
+
+  <!-- FILE UPLOAD SECTION -->
+  <section class="upload-section">
+    <h2>Upload Input Files</h2>
+
+    <div class="upload-grid">
+      <div class="upload-box">
+        <label>Amazon All Orders</label>
+        <input type="file" id="allOrdersFile" accept=".csv,.txt" />
+        <span class="status" id="statusAllOrders">Not uploaded</span>
+      </div>
+
+      <div class="upload-box">
+        <label>FBA Orders (30D)</label>
+        <input type="file" id="fbaOrdersFile" accept=".csv" />
+        <span class="status" id="statusFbaOrders">Not uploaded</span>
+      </div>
+
+      <div class="upload-box">
+        <label>FBA Stock</label>
+        <input type="file" id="fbaStockFile" accept=".csv" />
+        <span class="status" id="statusFbaStock">Not uploaded</span>
+      </div>
+
+      <div class="upload-box">
+        <label>Uniware Stock</label>
+        <input type="file" id="uniwareStockFile" accept=".csv" />
+        <span class="status" id="statusUniware">Not uploaded</span>
+      </div>
+    </div>
+
+    <button id="generateBtn" disabled>Generate Shipment Plan</button>
+  </section>
+
+  <!-- TABS -->
+  <section class="tabs">
+    <button class="tab-btn active" data-tab="amazonFc">Amazon FC Report</button>
+    <button class="tab-btn" data-tab="sellerFc">Seller FC Report</button>
+  </section>
+
+  <!-- TAB CONTENT -->
+  <section class="tab-content active" id="amazonFc">
+    <h2>Amazon FC Shipment Report</h2>
+    <div id="amazonFcTable">No data yet</div>
+  </section>
+
+  <section class="tab-content" id="sellerFc">
+    <h2>Seller FC Shipment Report</h2>
+    <div id="sellerFcTable">No data yet</div>
+  </section>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
