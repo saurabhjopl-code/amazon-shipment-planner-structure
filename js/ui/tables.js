@@ -28,8 +28,8 @@ function buildFCBlock(fcCode) {
   let html = `
     <div class="fc-title">
       ▶ Amazon FC: ${fcCode}
-      <span style="font-weight:normal;font-size:13px;">
-        (${state.data.length} SKUs)
+      <span style="font-size:13px;font-weight:normal;">
+        (${state.data.length} SKUs with stock)
       </span>
     </div>
   `;
@@ -43,7 +43,10 @@ function buildFCBlock(fcCode) {
           <th>Amazon Seller SKU</th>
           <th>30D Sale</th>
           <th>DRR</th>
-          <th>FC 30D Sale</th>
+          <th>FC Stock</th>
+          <th>SC</th>
+          <th>Send Qty</th>
+          <th>Recall Qty</th>
         </tr>
     `;
 
@@ -53,13 +56,17 @@ function buildFCBlock(fcCode) {
           <td>${r.sku}</td>
           <td>${r.total30D}</td>
           <td>${r.drr}</td>
-          <td>${r.fc30D}</td>
+          <td>${r.fcStock}</td>
+          <td>${r.sc === Infinity ? "∞" : r.sc}</td>
+          <td>${r.sendQty}</td>
+          <td>${r.recallQty}</td>
         </tr>
       `;
     });
 
     html += `
       </table>
+
       <div class="fc-actions">
         <button data-action="show">Show More</button>
         <button data-action="collapse">Collapse</button>
