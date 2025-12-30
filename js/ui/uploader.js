@@ -1,5 +1,5 @@
-export function initUploader() {
-  const files = {
+export function initUploader(onGenerate) {
+  const inputs = {
     allOrders: document.getElementById("allOrdersFile"),
     fbaOrders: document.getElementById("fbaOrdersFile"),
     fbaStock: document.getElementById("fbaStockFile"),
@@ -13,22 +13,28 @@ export function initUploader() {
     uniware: document.getElementById("statusUniware"),
   };
 
-  const generateBtn = document.getElementById("generateBtn");
+  const btn = document.getElementById("generateBtn");
 
-  Object.keys(files).forEach(key => {
-    files[key].addEventListener("change", () => {
-      if (files[key].files.length > 0) {
-        statuses[key].textContent = "Validated";
-        statuses[key].classList.add("valid");
+  Object.keys(inputs).forEach(k => {
+    inputs[k].addEventListener("change", () => {
+      if (inputs[k].files.length > 0) {
+        statuses[k].textContent = "Validated";
+        statuses[k].classList.add("valid");
       }
-      checkReady();
+      check();
     });
   });
 
-  function checkReady() {
-    const allUploaded = Object.values(files).every(
-      input => input.files.length > 0
-    );
-    generateBtn.disabled = !allUploaded;
+  btn.addEventListener("click", () => {
+    onGenerate({
+      allOrders: inputs.allOrders.files[0],
+      fbaOrders: inputs.fbaOrders.files[0],
+      fbaStock: inputs.fbaStock.files[0],
+      uniware: inputs.uniware.files[0]
+    });
+  });
+
+  function check() {
+    btn.disabled = !Object.values(inputs).every(i => i.files.length);
   }
 }
