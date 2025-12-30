@@ -4,10 +4,6 @@ import { parseCSV } from "./core/parser.js";
 import { calculate30DSales, attachDRR } from "./core/metrics.js";
 import { renderFCTable } from "./ui/tables.js";
 
-let appState = {
-  skuMetrics: []
-};
-
 document.addEventListener("DOMContentLoaded", () => {
   initUploader(handleGenerate);
   initTabs();
@@ -18,14 +14,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function handleGenerate(files) {
   const reader = new FileReader();
+
   reader.onload = () => {
     const rows = parseCSV(reader.result);
     const sales30D = calculate30DSales(rows);
-    appState.skuMetrics = attachDRR(sales30D);
+    const skuMetrics = attachDRR(sales30D);
 
-    // TEMP: single virtual FC until FC logic comes
-    renderFCTable("ALL_FC", appState.skuMetrics);
+    // TEMP single FC placeholder
+    renderFCTable("ALL_FC", skuMetrics);
+
     document.getElementById("exportAllBtn").disabled = false;
   };
+
   reader.readAsText(files.allOrders);
 }
