@@ -1,22 +1,20 @@
 /**
- * Amazon FC Stock Engine (FINAL – STRICT HEADER MAPPING)
- * -----------------------------------------------------
- * Uses ONLY official Amazon FBA Stock headers
- * No fuzzy detection, no guessing
+ * Amazon FC Stock Engine (FINAL – STRICT LOGIC, FLEXIBLE HEADERS)
+ * --------------------------------------------------------------
+ * Correct per your original specification
+ * Safe against Amazon CSV header quirks
  */
 
 const EXCLUDED_FCS = ["XHNF", "QWZ8"];
 const TARGET_SC_DAYS = 45;
 
 export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
-  const result = {};
-  const skuMap = {};
-
   if (!Array.isArray(fbaStockRows) || fbaStockRows.length === 0) {
     return {};
   }
 
-  /* ---------------- SKU METRICS ---------------- */
+  /* ---------------- SKU METRICS MAP ---------------- */
+  const skuMap = {};
   skuMetrics.forEach(r => {
     skuMap[String(r.sku).trim()] = {
       total30D: r.total30D,
@@ -24,49 +22,63 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     };
   });
 
-  /* ---------------- REQUIRED HEADERS ---------------- */
-  const REQUIRED_HEADERS = [
-    "MSKU",
-    "Location",
-    "Disposition",
-    "Ending Warehouse Balance"
-  ];
+  /* ---------------- HEADER NORMALIZATION ---------------- */
+  const normalize = s =>
+    String(s || "")
+      .replace(/\ufeff/g, "")   // remove BOM
+      .trim()
+      .toLowerCase();
 
-  const headers = Object.keys(fbaStockRows[0]);
+  const headerMap = {};
+  Object.keys(fbaStockRows[0]).forEach(h => {
+    headerMap[normalize(h)] = h;
+  });
 
-  for (const h of REQUIRED_HEADERS) {
-    if (!headers.includes(h)) {
-      throw new Error(`Missing required FBA Stock column: ${h}`);
-    }
+  const skuKey =
+    headerMap["msku"] ||
+    headerMap["merchant sku"] ||
+    headerMap["seller sku"];
+
+  const fcKey = headerMap["location"];
+  const dispositionKey = headerMap["disposition"];
+  const stockKey = headerMap["ending warehouse balance"];
+
+  if (!skuKey || !fcKey || !dispositionKey || !stockKey) {
+    console.error("Detected headers:", Object.keys(fbaStockRows[0]));
+    throw new Error(
+      "FBA Stock file does not match required Amazon format"
+    );
   }
 
   /* ---------------- PROCESS ROWS ---------------- */
+  const fcSkuStock = {};
+
   fbaStockRows.forEach(row => {
-    const disposition = String(row["Disposition"] || "").trim();
+    const disposition = String(row[dispositionKey] || "").trim();
     if (disposition !== "SELLABLE") return;
 
-    const fc = String(row["Location"] || "").trim();
+    const fc = String(row[fcKey] || "").trim();
     if (!fc || EXCLUDED_FCS.includes(fc)) return;
 
-    const sku = String(row["MSKU"] || "").trim();
+    const sku = String(row[skuKey] || "").trim();
     if (!sku) return;
 
     const stock = Number(
-      String(row["Ending Warehouse Balance"] || "0").replace(/,/g, "")
+      String(row[stockKey] || "0").replace(/,/g, "")
     );
     if (isNaN(stock) || stock <= 0) return;
 
-    if (!result[fc]) result[fc] = {};
-    result[fc][sku] = (result[fc][sku] || 0) + stock;
+    if (!fcSkuStock[fc]) fcSkuStock[fc] = {};
+    fcSkuStock[fc][sku] = (fcSkuStock[fc][sku] || 0) + stock;
   });
 
-  /* ---------------- BUILD FINAL OUTPUT ---------------- */
-  const finalOutput = {};
+  /* ---------------- BUILD OUTPUT ---------------- */
+  const result = {};
 
-  Object.keys(result).forEach(fc => {
-    finalOutput[fc] = Object.keys(result[fc]).map(sku => {
+  Object.keys(fcSkuStock).forEach(fc => {
+    result[fc] = Object.keys(fcSkuStock[fc]).map(sku => {
       const base = skuMap[sku] || { total30D: 0, drr: 0 };
-      const fcStock = result[fc][sku];
+      const fcStock = fcSkuStock[fc][sku];
       const drr = base.drr || 0;
       const sc = drr > 0 ? fcStock / drr : "∞";
 
@@ -88,5 +100,5 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     });
   });
 
-  return finalOutput;
+  return result;
 }
