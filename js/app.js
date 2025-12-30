@@ -5,15 +5,12 @@ import { calculate30DSales, attachDRR } from "./core/metrics.js";
 import { buildFCDemand } from "./core/fcDemand.js";
 import { renderFCTable } from "./ui/tables.js";
 
-/* v1.2 – v1.6 engines */
+/* Engines */
 import { buildAmazonFcStockPlan } from "./engine/amazonFcStockEngine.js";
 import { buildSellerStockMap } from "./engine/uniwareStockEngine.js";
 import { applyFcCapacity } from "./engine/fcCapacityEngine.js";
 import { buildSellerFcPlan } from "./engine/sellerFcEngine.js";
-import {
-  exportCsv,
-  exportAllToExcel
-} from "./export/exportEngine.js";
+import { exportAllToExcel } from "./export/exportEngine.js";
 
 let AMAZON_FC_FINAL = {};
 let SELLER_FC_FINAL = [];
@@ -27,87 +24,66 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 });
 
-function handleGenerate(files) {
+async function handleGenerate(files) {
   document.getElementById("amazonFcTables").innerHTML = "";
   document.getElementById("sellerFcTable").innerHTML = "";
 
-  /* ---------- READ ALL ORDERS ---------- */
-  const readerAllOrders = new FileReader();
-  const readerFbaOrders = new FileReader();
-  const readerFbaStock = new FileReader();
-  const readerUniware = new FileReader();
-  const readerMapping = new FileReader();
+  /* ---------- ALL ORDERS ---------- */
+  const allOrdersText = await files.allOrders.text();
+  const allOrdersRows = parseCSV(allOrdersText);
+  const skuMetrics = attachDRR(calculate30DSales(allOrdersRows));
 
-  readerAllOrders.onload = () => {
-    const allOrdersRows = parseCSV(readerAllOrders.result);
-    const skuMetrics = attachDRR(
-      calculate30DSales(allOrdersRows)
+  /* ---------- FBA ORDERS ---------- */
+  const fbaOrdersText = await files.fbaOrders.text();
+  const fbaOrdersRows = parseCSV(fbaOrdersText);
+  const fcDemand = buildFCDemand(fbaOrdersRows);
+
+  /* ---------- FBA STOCK ---------- */
+  const fbaStockText = await files.fbaStock.text();
+  const fbaStockRows = parseCSV(fbaStockText);
+  const amazonFcPlan =
+    buildAmazonFcStockPlan(fbaStockRows, skuMetrics);
+
+  /* ---------- UNIWIRE STOCK ---------- */
+  const uniwareText = await files.uniware.text();
+  const uniwareRows = parseCSV(uniwareText);
+
+  /* ---------- SKU MAPPING (STATIC FROM GITHUB) ---------- */
+  const mappingRes = await fetch("./data/sku_mapping.csv");
+  const mappingText = await mappingRes.text();
+  const mappingRows = parseCSV(mappingText);
+
+  /* ---------- v1.3 Seller Stock ---------- */
+  const sellerStockMap =
+    buildSellerStockMap(uniwareRows, mappingRows);
+
+  /* ---------- v1.4 Capacity ---------- */
+  AMAZON_FC_FINAL =
+    applyFcCapacity(
+      amazonFcPlan,
+      window.FC_CAPACITY || []
     );
 
-    /* ---------- READ FBA ORDERS ---------- */
-    readerFbaOrders.onload = () => {
-      const fbaOrdersRows = parseCSV(readerFbaOrders.result);
-      const fcDemand = buildFCDemand(fbaOrdersRows);
+  /* ---------- v1.5 Seller FC ---------- */
+  SELLER_FC_FINAL =
+    buildSellerFcPlan(
+      skuMetrics,
+      fcDemand,
+      sellerStockMap
+    );
 
-      /* ---------- READ FBA STOCK ---------- */
-      readerFbaStock.onload = () => {
-        const fbaStockRows = parseCSV(readerFbaStock.result);
+  /* ---------- RENDER AMAZON FC ---------- */
+  Object.keys(AMAZON_FC_FINAL).forEach(fc => {
+    renderFCTable(fc, AMAZON_FC_FINAL[fc]);
+  });
 
-        // v1.2 – Amazon FC Stock Plan
-        const amazonFcPlan =
-          buildAmazonFcStockPlan(fbaStockRows, skuMetrics);
+  /* ---------- RENDER SELLER FC ---------- */
+  renderSellerFcTable(SELLER_FC_FINAL);
 
-        /* ---------- READ UNIWIRE ---------- */
-        readerUniware.onload = () => {
-          const uniwareRows = parseCSV(readerUniware.result);
-
-          /* ---------- READ SKU MAPPING ---------- */
-          readerMapping.onload = () => {
-            const mappingRows = parseCSV(readerMapping.result);
-
-            // v1.3 – Seller stock
-            const sellerStockMap =
-              buildSellerStockMap(uniwareRows, mappingRows);
-
-            // v1.4 – FC capacity
-            AMAZON_FC_FINAL =
-              applyFcCapacity(amazonFcPlan, window.FC_CAPACITY || []);
-
-            // v1.5 – Seller FC plan
-            SELLER_FC_FINAL =
-              buildSellerFcPlan(
-                skuMetrics,
-                fcDemand,
-                sellerStockMap
-              );
-
-            /* ---------- RENDER AMAZON FC ---------- */
-            Object.keys(AMAZON_FC_FINAL).forEach(fc => {
-              renderFCTable(fc, AMAZON_FC_FINAL[fc]);
-            });
-
-            /* ---------- RENDER SELLER FC ---------- */
-            renderSellerFcTable(SELLER_FC_FINAL);
-
-            document.getElementById("exportAllBtn").disabled = false;
-          };
-
-          readerMapping.readAsText(files.mapping);
-        };
-
-        readerUniware.readAsText(files.uniware);
-      };
-
-      readerFbaStock.readAsText(files.fbaStock);
-    };
-
-    readerFbaOrders.readAsText(files.fbaOrders);
-  };
-
-  readerAllOrders.readAsText(files.allOrders);
+  document.getElementById("exportAllBtn").disabled = false;
 }
 
-/* ---------------- SELLER FC TABLE ---------------- */
+/* -------- SELLER FC TABLE -------- */
 
 function renderSellerFcTable(rows) {
   if (!rows || rows.length === 0) {
@@ -143,11 +119,9 @@ function renderSellerFcTable(rows) {
         <td>${r.recommendedFc}</td>
         <td>${r.sendQty}</td>
         <td>${r.remark}</td>
-      </tr>
-    `;
+      </tr>`;
   });
 
   html += "</table>";
-
   document.getElementById("sellerFcTable").innerHTML = html;
 }
