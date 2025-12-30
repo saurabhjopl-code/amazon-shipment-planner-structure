@@ -3,38 +3,50 @@ export function initUploader(onGenerate) {
     allOrders: document.getElementById("allOrdersFile"),
     fbaOrders: document.getElementById("fbaOrdersFile"),
     fbaStock: document.getElementById("fbaStockFile"),
-    uniware: document.getElementById("uniwareStockFile"),
+    uniware: document.getElementById("uniwareStockFile")
   };
 
   const statuses = {
     allOrders: document.getElementById("statusAllOrders"),
     fbaOrders: document.getElementById("statusFbaOrders"),
     fbaStock: document.getElementById("statusFbaStock"),
-    uniware: document.getElementById("statusUniware"),
+    uniware: document.getElementById("statusUniware")
   };
 
-  const btn = document.getElementById("generateBtn");
+  const generateBtn = document.getElementById("generateBtn");
 
-  Object.keys(inputs).forEach(k => {
-    inputs[k].addEventListener("change", () => {
-      if (inputs[k].files.length > 0) {
-        statuses[k].textContent = "Validated";
-        statuses[k].classList.add("valid");
+  // Reset state
+  generateBtn.disabled = true;
+
+  Object.keys(inputs).forEach(key => {
+    inputs[key].addEventListener("change", () => {
+      if (inputs[key].files.length > 0) {
+        statuses[key].textContent = "Validated";
+        statuses[key].classList.add("valid");
+      } else {
+        statuses[key].textContent = "Not uploaded";
+        statuses[key].classList.remove("valid");
       }
-      check();
+
+      checkReady();
     });
   });
 
-  btn.addEventListener("click", () => {
+  function checkReady() {
+    const ready = Object.values(inputs).every(
+      input => input.files && input.files.length > 0
+    );
+    generateBtn.disabled = !ready;
+  }
+
+  generateBtn.onclick = () => {
+    if (generateBtn.disabled) return;
+
     onGenerate({
       allOrders: inputs.allOrders.files[0],
       fbaOrders: inputs.fbaOrders.files[0],
       fbaStock: inputs.fbaStock.files[0],
       uniware: inputs.uniware.files[0]
     });
-  });
-
-  function check() {
-    btn.disabled = !Object.values(inputs).every(i => i.files.length);
-  }
+  };
 }
