@@ -1,22 +1,22 @@
 /**
- * Amazon FC Stock Engine (FINAL – FC SAFE)
- * ---------------------------------------
- * - Correct FC detection
- * - Removes quoted / numeric-only FCs
- * - Guarantees readable FC names
+ * Amazon FC Stock Engine (FINAL – STRICT HEADER MAPPING)
+ * -----------------------------------------------------
+ * Uses ONLY official Amazon FBA Stock headers
+ * No fuzzy detection, no guessing
  */
 
 const EXCLUDED_FCS = ["XHNF", "QWZ8"];
 const TARGET_SC_DAYS = 45;
 
 export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
-  const fcSkuStock = {};
+  const result = {};
   const skuMap = {};
-  const allFcs = new Set();
 
-  if (!Array.isArray(fbaStockRows)) return {};
+  if (!Array.isArray(fbaStockRows) || fbaStockRows.length === 0) {
+    return {};
+  }
 
-  // SKU metrics
+  /* ---------------- SKU METRICS ---------------- */
   skuMetrics.forEach(r => {
     skuMap[String(r.sku).trim()] = {
       total30D: r.total30D,
@@ -24,62 +24,49 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     };
   });
 
-  const normalize = s =>
-    String(s || "")
-      .replace(/\ufeff/g, "")
-      .replace(/"/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
+  /* ---------------- REQUIRED HEADERS ---------------- */
+  const REQUIRED_HEADERS = [
+    "MSKU",
+    "Location",
+    "Disposition",
+    "Ending Warehouse Balance"
+  ];
 
-  const headers = Object.keys(fbaStockRows[0] || {}).map(h => ({
-    raw: h,
-    norm: normalize(h)
-  }));
+  const headers = Object.keys(fbaStockRows[0]);
 
-  const find = keys =>
-    headers.find(h => keys.some(k => h.norm.includes(k)))?.raw;
-
-  const skuKey = find(["msku", "seller sku"]);
-  const fcKey = find(["location", "warehouse", "fc"]);
-  const stockKey = find(["ending warehouse", "ending balance"]);
-
-  if (!skuKey || !fcKey) {
-    console.error("FC headers not found", headers);
-    return {};
+  for (const h of REQUIRED_HEADERS) {
+    if (!headers.includes(h)) {
+      throw new Error(`Missing required FBA Stock column: ${h}`);
+    }
   }
 
+  /* ---------------- PROCESS ROWS ---------------- */
   fbaStockRows.forEach(row => {
-    let fc = String(row[fcKey] || "")
-      .replace(/"/g, "")
-      .trim();
+    const disposition = String(row["Disposition"] || "").trim();
+    if (disposition !== "SELLABLE") return;
 
-    // ❌ Reject numeric-only FCs like "28"
-    if (!fc || /^[0-9]+$/.test(fc)) return;
-    if (EXCLUDED_FCS.includes(fc)) return;
+    const fc = String(row["Location"] || "").trim();
+    if (!fc || EXCLUDED_FCS.includes(fc)) return;
 
-    allFcs.add(fc);
-
-    const sku = String(row[skuKey] || "").trim();
+    const sku = String(row["MSKU"] || "").trim();
     if (!sku) return;
 
     const stock = Number(
-      String(row[stockKey] || "0").replace(/,/g, "")
+      String(row["Ending Warehouse Balance"] || "0").replace(/,/g, "")
     );
+    if (isNaN(stock) || stock <= 0) return;
 
-    if (!fcSkuStock[fc]) fcSkuStock[fc] = {};
-    if (!isNaN(stock) && stock > 0) {
-      fcSkuStock[fc][sku] =
-        (fcSkuStock[fc][sku] || 0) + stock;
-    }
+    if (!result[fc]) result[fc] = {};
+    result[fc][sku] = (result[fc][sku] || 0) + stock;
   });
 
-  const result = {};
-  allFcs.forEach(fc => {
-    const skuStocks = fcSkuStock[fc] || {};
-    result[fc] = Object.keys(skuStocks).map(sku => {
+  /* ---------------- BUILD FINAL OUTPUT ---------------- */
+  const finalOutput = {};
+
+  Object.keys(result).forEach(fc => {
+    finalOutput[fc] = Object.keys(result[fc]).map(sku => {
       const base = skuMap[sku] || { total30D: 0, drr: 0 };
-      const fcStock = skuStocks[sku];
+      const fcStock = result[fc][sku];
       const drr = base.drr || 0;
       const sc = drr > 0 ? fcStock / drr : "∞";
 
@@ -91,21 +78,15 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
         sc,
         sendQty:
           drr > 0 && sc < TARGET_SC_DAYS
-            ? Math.max(
-                Math.floor(TARGET_SC_DAYS * drr - fcStock),
-                0
-              )
+            ? Math.max(Math.floor(TARGET_SC_DAYS * drr - fcStock), 0)
             : 0,
         recallQty:
           drr > 0 && sc > TARGET_SC_DAYS
-            ? Math.max(
-                Math.floor(fcStock - TARGET_SC_DAYS * drr),
-                0
-              )
+            ? Math.max(Math.floor(fcStock - TARGET_SC_DAYS * drr), 0)
             : 0
       };
     });
   });
 
-  return result;
+  return finalOutput;
 }
