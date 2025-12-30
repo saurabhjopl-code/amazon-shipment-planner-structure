@@ -1,34 +1,71 @@
 const EXCLUDED_FCS = ["XHNF", "QWZ8"];
 
+function parseDateToTimestamp(dateStr) {
+  if (!dateStr) return 0;
+
+  // Handle YYYY-MM-DD
+  if (dateStr.includes("-") && dateStr.split("-")[0].length === 4) {
+    return new Date(dateStr).getTime();
+  }
+
+  // Handle DD-MM-YYYY or DD/MM/YYYY
+  const parts = dateStr.includes("/")
+    ? dateStr.split("/")
+    : dateStr.split("-");
+
+  if (parts.length === 3) {
+    const [dd, mm, yyyy] = parts;
+    return new Date(`${yyyy}-${mm}-${dd}`).getTime();
+  }
+
+  return 0;
+}
+
 export function buildFCStock(rows) {
   const fcStock = {};
 
-  // Find latest date
-  const dates = rows
-    .map(r => r["Date"])
-    .filter(Boolean)
-    .sort();
+  if (!rows || rows.length === 0) return {};
 
-  if (dates.length === 0) return {};
+  // Detect headers safely
+  const sample = rows[0];
+  const dateKey = Object.keys(sample).find(k => k.toLowerCase() === "date");
+  const locationKey = Object.keys(sample).find(k =>
+    ["location", "warehouse", "fulfillment center"].includes(k.toLowerCase())
+  );
+  const skuKey = Object.keys(sample).find(k => k.toLowerCase() === "msku");
+  const dispKey = Object.keys(sample).find(k => k.toLowerCase() === "disposition");
+  const stockKey = Object.keys(sample).find(k =>
+    k.toLowerCase().includes("ending")
+  );
 
-  const latestDate = dates[dates.length - 1];
+  if (!dateKey || !locationKey || !skuKey || !dispKey || !stockKey) {
+    console.error("FBA Stock headers not detected correctly");
+    return {};
+  }
+
+  // Find latest date using timestamps
+  let latestTs = 0;
+  rows.forEach(r => {
+    const ts = parseDateToTimestamp(r[dateKey]);
+    if (ts > latestTs) latestTs = ts;
+  });
 
   rows.forEach(row => {
-    if (row["Date"] !== latestDate) return;
-    if (row["Disposition"] !== "SELLABLE") return;
+    const ts = parseDateToTimestamp(row[dateKey]);
+    if (ts !== latestTs) return;
 
-    const fc = row["Location"];
+    if (row[dispKey]?.toUpperCase() !== "SELLABLE") return;
+
+    const fc = row[locationKey];
     if (!fc || EXCLUDED_FCS.includes(fc)) return;
 
-    const sku = row["MSKU"];
-    const stock = Number(row["Ending Warehouse Balance"] || 0);
+    const sku = row[skuKey];
+    const stock = Number(row[stockKey] || 0);
 
     if (!sku || stock <= 0) return;
 
     if (!fcStock[fc]) fcStock[fc] = {};
-    if (!fcStock[fc][sku]) fcStock[fc][sku] = 0;
-
-    fcStock[fc][sku] += stock;
+    fcStock[fc][sku] = (fcStock[fc][sku] || 0) + stock;
   });
 
   return fcStock;
