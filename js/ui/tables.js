@@ -1,19 +1,14 @@
 /**
- * Amazon FC Table Renderer (RESTORED + SAFE)
- * -----------------------------------------
- * This restores the previously working renderer
- * and adds only a safe empty-state.
+ * Amazon FC Table Renderer (FIXED – STATE SAFE)
+ * ---------------------------------------------
+ * - No internal render memory
+ * - Always renders when called
+ * - Safe for regenerate / re-upload
  */
-
-let renderedFCs = new Set();
 
 export function renderFCTable(fc, rows) {
   const container = document.getElementById("amazonFcTables");
   if (!container) return;
-
-  // Prevent duplicate render
-  if (renderedFCs.has(fc)) return;
-  renderedFCs.add(fc);
 
   const block = document.createElement("div");
   block.className = "fc-report";
@@ -55,7 +50,7 @@ export function renderFCTable(fc, rows) {
 }
 
 /* ===============================
-   TABLE HTML
+   TABLE BUILDER
 ================================ */
 
 function buildTable(rows) {
