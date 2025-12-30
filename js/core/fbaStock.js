@@ -1,49 +1,58 @@
-const EXCLUDED_FCS = ["XHNF", "QWZ8"];
-
 export function buildFCStock(rows) {
   const fcStock = {};
+  const debug = {
+    totalRows: rows.length,
+    detectedHeaders: Object.keys(rows[0] || {}),
+    usedStockKey: null,
+    usedSkuKey: null,
+    usedFcKey: null
+  };
 
   if (!rows || rows.length === 0) {
-    console.error("FBA Stock file is empty");
-    return {};
+    return { fcStock: {}, debug };
   }
 
-  // Normalize header keys (trim + lowercase)
-  const normalize = k => k.trim().toLowerCase();
+  // normalize headers
+  const normalize = s => s.trim().toLowerCase();
+  const headerMap = {};
+  Object.keys(rows[0]).forEach(k => {
+    headerMap[normalize(k)] = k;
+  });
 
-  const headers = Object.keys(rows[0]).reduce((acc, k) => {
-    acc[normalize(k)] = k;
-    return acc;
-  }, {});
+  // extremely tolerant detection
+  const skuKey =
+    headerMap["msku"] ||
+    headerMap["merchant sku"] ||
+    headerMap["sku"];
 
-  const skuKey = headers["msku"];
-  const locationKey = headers["location"] || headers["warehouse"];
-  const dispKey = headers["disposition"];
-  const stockKey = Object.keys(headers).find(k =>
-    k.includes("ending")
-  );
+  const fcKey =
+    headerMap["location"] ||
+    headerMap["location id"] ||
+    headerMap["warehouse"];
 
-  if (!skuKey || !locationKey || !stockKey) {
-    console.error("Required FBA Stock headers missing", headers);
-    return {};
+  const stockKey =
+    headerMap["ending warehouse balance"] ||
+    headerMap["ending balance"] ||
+    Object.keys(headerMap).find(k => k.includes("ending"));
+
+  debug.usedSkuKey = skuKey;
+  debug.usedFcKey = fcKey;
+  debug.usedStockKey = stockKey;
+
+  if (!skuKey || !fcKey || !stockKey) {
+    return { fcStock: {}, debug };
   }
 
   rows.forEach(row => {
-    const fc = row[locationKey]?.trim();
-    if (!fc || EXCLUDED_FCS.includes(fc)) return;
+    const sku = String(row[skuKey] || "").trim();
+    const fc = String(row[fcKey] || "").trim();
+    const stock = Number(row[stockKey] || 0);
 
-    const sku = row[skuKey]?.trim();
-    if (!sku) return;
-
-    const disp = (row[dispKey] || "").toString().trim().toUpperCase();
-    if (disp && disp !== "SELLABLE") return; // tolerate blanks
-
-    const stock = Number(row[headers[stockKey]] || 0);
-    if (stock <= 0) return;
+    if (!sku || !fc || stock <= 0) return;
 
     if (!fcStock[fc]) fcStock[fc] = {};
     fcStock[fc][sku] = (fcStock[fc][sku] || 0) + stock;
   });
 
-  return fcStock;
+  return { fcStock, debug };
 }
