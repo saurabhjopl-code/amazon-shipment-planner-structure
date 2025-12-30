@@ -15,8 +15,9 @@ export function initUploader(onGenerate) {
 
   const generateBtn = document.getElementById("generateBtn");
 
-  // Reset state
-  generateBtn.disabled = true;
+  // 🔒 NEVER disable button again
+  generateBtn.disabled = false;
+  generateBtn.style.display = "inline-block";
 
   Object.keys(inputs).forEach(key => {
     inputs[key].addEventListener("change", () => {
@@ -27,20 +28,20 @@ export function initUploader(onGenerate) {
         statuses[key].textContent = "Not uploaded";
         statuses[key].classList.remove("valid");
       }
-
-      checkReady();
     });
   });
 
-  function checkReady() {
-    const ready = Object.values(inputs).every(
-      input => input.files && input.files.length > 0
-    );
-    generateBtn.disabled = !ready;
-  }
-
   generateBtn.onclick = () => {
-    if (generateBtn.disabled) return;
+    const missing = Object.keys(inputs).filter(
+      k => !inputs[k].files || inputs[k].files.length === 0
+    );
+
+    if (missing.length > 0) {
+      alert(
+        "Please upload all required files before generating shipment plan."
+      );
+      return;
+    }
 
     onGenerate({
       allOrders: inputs.allOrders.files[0],
