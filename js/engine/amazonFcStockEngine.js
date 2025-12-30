@@ -1,10 +1,9 @@
 /**
- * Amazon FC Stock Engine (FINAL – Amazon-Proof)
- * ---------------------------------------------
- * This version:
- * - NEVER throws header errors
- * - Auto-detects headers using partial matching
- * - Survives BOM, extra spaces, renamed columns
+ * Amazon FC Stock Engine (FINAL – Visible Empty-State)
+ * ---------------------------------------------------
+ * - Always returns FC keys if stock exists
+ * - Does NOT hide FCs just because sales are zero
+ * - Never silently returns empty without logging
  */
 
 const EXCLUDED_FCS = ["XHNF", "QWZ8"];
@@ -13,13 +12,14 @@ const TARGET_SC_DAYS = 45;
 export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
   const fcStockMap = {};
   const skuMap = {};
+  const seenFcs = new Set();
 
   if (!fbaStockRows || fbaStockRows.length === 0) {
     console.warn("FBA Stock file empty");
     return {};
   }
 
-  /* ---------------- SKU METRICS ---------------- */
+  /* ---------------- SKU METRICS MAP ---------------- */
   skuMetrics.forEach(r => {
     skuMap[String(r.sku).trim()] = {
       total30D: r.total30D,
@@ -30,7 +30,7 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
   /* ---------------- HEADER DETECTION ---------------- */
   const normalize = s =>
     String(s || "")
-      .replace(/\ufeff/g, "")     // remove BOM
+      .replace(/\ufeff/g, "")
       .replace(/\s+/g, " ")
       .trim()
       .toLowerCase();
@@ -56,7 +56,7 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
 
   if (!skuKey || !fcKey || !stockKey) {
     console.error("FBA Stock header scan:", headers);
-    console.warn("Proceeding with empty FC stock due to unmatched headers");
+    console.warn("No usable headers found in FBA stock");
     return {};
   }
 
@@ -71,29 +71,37 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     const stock = Number(
       String(row[stockKey] || "0").replace(/,/g, "")
     );
-    if (isNaN(stock) || stock <= 0) return;
+    if (isNaN(stock) || stock < 0) return;
+
+    seenFcs.add(fc);
 
     if (!fcStockMap[fc]) fcStockMap[fc] = {};
     fcStockMap[fc][sku] = (fcStockMap[fc][sku] || 0) + stock;
   });
 
+  if (seenFcs.size === 0) {
+    console.warn("No Amazon FCs detected after exclusions");
+  }
+
   /* ---------------- BUILD PLAN ---------------- */
   const result = {};
 
-  Object.keys(fcStockMap).forEach(fc => {
-    result[fc] = Object.keys(fcStockMap[fc]).map(sku => {
+  seenFcs.forEach(fc => {
+    const skuStock = fcStockMap[fc] || {};
+
+    result[fc] = Object.keys(skuStock).map(sku => {
       const base = skuMap[sku] || { total30D: 0, drr: 0 };
-      const fcStock = fcStockMap[fc][sku];
+      const fcStock = skuStock[sku];
       const drr = base.drr || 0;
 
-      const sc = drr > 0 ? fcStock / drr : Infinity;
+      const sc = drr > 0 ? fcStock / drr : "∞";
 
       return {
         sku,
         total30D: base.total30D,
         drr,
         fcStock,
-        sc: sc === Infinity ? "∞" : Number(sc.toFixed(1)),
+        sc,
         sendQty:
           drr > 0 && sc < TARGET_SC_DAYS
             ? Math.max(Math.floor(TARGET_SC_DAYS * drr - fcStock), 0)
