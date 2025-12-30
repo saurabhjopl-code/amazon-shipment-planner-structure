@@ -6,22 +6,18 @@
 body {
   margin: 0;
   background: #f6f7fb;
-  color: #111827;
+  color: #222;
 }
-
-/* ================= HEADER ================= */
 
 .header {
   background: #1f2937;
-  color: #ffffff;
+  color: #fff;
   padding: 20px;
   text-align: center;
 }
 
-/* ================= UPLOAD SECTION ================= */
-
 .upload-section {
-  background: #ffffff;
+  background: #fff;
   margin: 20px;
   padding: 20px;
   border-radius: 8px;
@@ -34,56 +30,44 @@ body {
 }
 
 .upload-box {
-  border: 1px dashed #d1d5db;
+  border: 1px dashed #ccc;
   padding: 12px;
   border-radius: 6px;
   background: #fafafa;
 }
 
 .upload-box label {
-  font-weight: bold;
   display: block;
+  font-weight: bold;
   margin-bottom: 6px;
 }
 
 .status {
+  display: block;
+  margin-top: 5px;
   font-size: 12px;
-  color: #6b7280;
+  color: #999;
 }
 
 .status.valid {
-  color: #16a34a;
+  color: green;
 }
-
-.action-row {
-  margin-top: 20px;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-/* ================= BUTTONS ================= */
 
 button {
-  padding: 10px 16px;
+  margin-top: 20px;
+  padding: 12px 20px;
   border: none;
+  background: #2563eb;
+  color: #fff;
+  font-size: 16px;
   border-radius: 6px;
   cursor: pointer;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 14px;
-}
-
-button:hover {
-  background: #1d4ed8;
 }
 
 button:disabled {
   background: #9ca3af;
   cursor: not-allowed;
 }
-
-/* ================= TABS ================= */
 
 .tabs {
   display: flex;
@@ -92,20 +76,21 @@ button:disabled {
 }
 
 .tab-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
   background: #e5e7eb;
-  color: #111827;
 }
 
 .tab-btn.active {
   background: #2563eb;
-  color: #ffffff;
+  color: #fff;
 }
-
-/* ================= TAB CONTENT ================= */
 
 .tab-content {
   display: none;
-  background: #ffffff;
+  background: #fff;
   margin: 20px;
   padding: 20px;
   border-radius: 8px;
@@ -113,54 +98,4 @@ button:disabled {
 
 .tab-content.active {
   display: block;
-}
-
-/* ================= FC BLOCK ================= */
-
-.fc-block {
-  margin-bottom: 35px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.fc-title {
-  font-size: 18px;
-  font-weight: bold;
-  margin-bottom: 10px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.fc-title:hover {
-  color: #2563eb;
-}
-
-/* ================= TABLE ================= */
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 10px;
-}
-
-th,
-td {
-  border: 1px solid #e5e7eb;
-  padding: 6px 8px;
-  text-align: left;
-  font-size: 13px;
-}
-
-th {
-  background: #f3f4f6;
-  font-weight: bold;
-}
-
-/* ================= FC ACTION BUTTONS ================= */
-
-.fc-actions {
-  margin-top: 12px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
 }
