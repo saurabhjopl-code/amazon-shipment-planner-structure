@@ -1,18 +1,18 @@
-const fcState = {};
 const PAGE_SIZE = 25;
+const fcState = {};
 
 export function renderFCTable(fcCode, data) {
   if (!fcState[fcCode]) {
     fcState[fcCode] = {
       visible: PAGE_SIZE,
-      data: data
+      data
     };
   } else {
     fcState[fcCode].data = data;
   }
 
   const container = document.getElementById("amazonFcTables");
-  container.innerHTML = ""; // clean render (multi-FC ready)
+  container.innerHTML = "";
 
   Object.keys(fcState).forEach(code => {
     container.appendChild(buildFCBlock(code));
@@ -21,30 +21,30 @@ export function renderFCTable(fcCode, data) {
 
 function buildFCBlock(fcCode) {
   const state = fcState[fcCode];
-  const visibleData = state.data.slice(0, state.visible);
+  const rows = state.data.slice(0, state.visible);
 
   const block = document.createElement("div");
   block.className = "fc-block";
 
   let html = `
-    <div class="fc-title">FC: ${fcCode}</div>
+    <div class="fc-title">Amazon FC: ${fcCode}</div>
 
     <table>
       <tr>
         <th>Amazon Seller SKU</th>
-        <th>ASIN</th>
         <th>30D Sale</th>
         <th>DRR</th>
+        <th>FC 30D Sale</th>
       </tr>
   `;
 
-  visibleData.forEach(r => {
+  rows.forEach(r => {
     html += `
       <tr>
         <td>${r.sku}</td>
-        <td>${r.asin}</td>
         <td>${r.total30D}</td>
         <td>${r.drr}</td>
+        <td>${r.fc30D || 0}</td>
       </tr>
     `;
   });
@@ -64,21 +64,13 @@ function buildFCBlock(fcCode) {
   block.querySelectorAll("button").forEach(btn => {
     btn.addEventListener("click", () => {
       const action = btn.dataset.action;
-      const fc = btn.dataset.fc;
 
-      if (action === "show") {
-        fcState[fc].visible += PAGE_SIZE;
-      }
+      if (action === "show") state.visible += PAGE_SIZE;
+      if (action === "collapse") state.visible = PAGE_SIZE;
+      if (action === "export")
+        alert(`Export for ${fcCode} coming next phase`);
 
-      if (action === "collapse") {
-        fcState[fc].visible = PAGE_SIZE;
-      }
-
-      if (action === "export") {
-        alert(`Export for ${fc} will be enabled in next phase`);
-      }
-
-      renderFCTable(fc, fcState[fc].data);
+      renderFCTable(fcCode, state.data);
     });
   });
 
