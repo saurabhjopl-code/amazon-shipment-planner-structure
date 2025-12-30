@@ -1,67 +1,66 @@
 /**
- * Amazon FC Table Renderer (FINAL)
- * --------------------------------
- * Always renders FC container
- * Shows empty-state message if no rows
+ * Amazon FC Table Renderer (RESTORED + SAFE)
+ * -----------------------------------------
+ * This restores the previously working renderer
+ * and adds only a safe empty-state.
  */
 
-let FC_RENDER_COUNT = {};
+let renderedFCs = new Set();
 
 export function renderFCTable(fc, rows) {
   const container = document.getElementById("amazonFcTables");
+  if (!container) return;
 
-  if (!FC_RENDER_COUNT[fc]) {
-    FC_RENDER_COUNT[fc] = 0;
-  }
+  // Prevent duplicate render
+  if (renderedFCs.has(fc)) return;
+  renderedFCs.add(fc);
 
-  const wrapper = document.createElement("div");
-  wrapper.className = "fc-block";
+  const block = document.createElement("div");
+  block.className = "fc-report";
 
-  /* ---------- FC HEADER ---------- */
+  /* ---------- HEADER ---------- */
   const header = document.createElement("div");
-  header.className = "fc-header";
+  header.className = "fc-report-header";
   header.innerHTML = `
-    <h3>${fc}</h3>
-    <button class="toggle-btn">Expand</button>
+    <span class="fc-name">${fc}</span>
+    <button class="fc-toggle-btn">Expand</button>
   `;
-  wrapper.appendChild(header);
+  block.appendChild(header);
 
-  /* ---------- TABLE CONTAINER ---------- */
-  const tableWrap = document.createElement("div");
-  tableWrap.className = "fc-table";
-  tableWrap.style.display = "none";
+  /* ---------- CONTENT ---------- */
+  const content = document.createElement("div");
+  content.className = "fc-report-content";
+  content.style.display = "none";
 
   if (!rows || rows.length === 0) {
-    tableWrap.innerHTML = `
-      <p style="padding:10px;color:#666;">
+    content.innerHTML = `
+      <div class="fc-empty">
         No sellable stock found for this FC
-      </p>
+      </div>
     `;
   } else {
-    tableWrap.innerHTML = buildTableHTML(fc, rows);
+    content.innerHTML = buildTable(rows);
   }
 
-  wrapper.appendChild(tableWrap);
-  container.appendChild(wrapper);
+  block.appendChild(content);
+  container.appendChild(block);
 
   /* ---------- TOGGLE ---------- */
-  header.querySelector(".toggle-btn").onclick = () => {
-    const open = tableWrap.style.display === "block";
-    tableWrap.style.display = open ? "none" : "block";
-    header.querySelector(".toggle-btn").innerText =
-      open ? "Expand" : "Collapse";
+  const btn = header.querySelector(".fc-toggle-btn");
+  btn.onclick = () => {
+    const open = content.style.display === "block";
+    content.style.display = open ? "none" : "block";
+    btn.innerText = open ? "Expand" : "Collapse";
   };
 }
 
 /* ===============================
-   TABLE BUILDER
+   TABLE HTML
 ================================ */
 
-function buildTableHTML(fc, rows) {
-  const visibleRows = rows.slice(0, 25);
-
+function buildTable(rows) {
   let html = `
-    <table>
+    <table class="fc-table">
       <thead>
         <tr>
           <th>Amazon Seller SKU</th>
@@ -76,7 +75,7 @@ function buildTableHTML(fc, rows) {
       <tbody>
   `;
 
-  visibleRows.forEach(r => {
+  rows.slice(0, 25).forEach(r => {
     html += `
       <tr>
         <td>${r.sku}</td>
@@ -90,11 +89,14 @@ function buildTableHTML(fc, rows) {
     `;
   });
 
-  html += "</tbody></table>";
+  html += `
+      </tbody>
+    </table>
+  `;
 
   if (rows.length > 25) {
     html += `
-      <div style="padding:10px;">
+      <div class="fc-note">
         Showing 25 of ${rows.length} rows
       </div>
     `;
