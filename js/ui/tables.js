@@ -1,101 +1,100 @@
-/**
- * Amazon FC Table Renderer (FIXED – STATE SAFE)
- * ---------------------------------------------
- * - No internal render memory
- * - Always renders when called
- * - Safe for regenerate / re-upload
- */
+const PAGE_SIZE = 25;
+const fcState = {};
 
-export function renderFCTable(fc, rows) {
-  const container = document.getElementById("amazonFcTables");
-  if (!container) return;
-
-  const block = document.createElement("div");
-  block.className = "fc-report";
-
-  /* ---------- HEADER ---------- */
-  const header = document.createElement("div");
-  header.className = "fc-report-header";
-  header.innerHTML = `
-    <span class="fc-name">${fc}</span>
-    <button class="fc-toggle-btn">Expand</button>
-  `;
-  block.appendChild(header);
-
-  /* ---------- CONTENT ---------- */
-  const content = document.createElement("div");
-  content.className = "fc-report-content";
-  content.style.display = "none";
-
-  if (!rows || rows.length === 0) {
-    content.innerHTML = `
-      <div class="fc-empty">
-        No sellable stock found for this FC
-      </div>
-    `;
+export function renderFCTable(fcCode, data) {
+  if (!fcState[fcCode]) {
+    fcState[fcCode] = {
+      visible: PAGE_SIZE,
+      expanded: false, // 🔒 default collapsed
+      data
+    };
   } else {
-    content.innerHTML = buildTable(rows);
+    fcState[fcCode].data = data;
   }
 
-  block.appendChild(content);
-  container.appendChild(block);
+  const container = document.getElementById("amazonFcTables");
+  container.innerHTML = "";
 
-  /* ---------- TOGGLE ---------- */
-  const btn = header.querySelector(".fc-toggle-btn");
-  btn.onclick = () => {
-    const open = content.style.display === "block";
-    content.style.display = open ? "none" : "block";
-    btn.innerText = open ? "Expand" : "Collapse";
-  };
+  Object.keys(fcState).forEach(code => {
+    container.appendChild(buildFCBlock(code));
+  });
 }
 
-/* ===============================
-   TABLE BUILDER
-================================ */
+function buildFCBlock(fcCode) {
+  const state = fcState[fcCode];
+  const block = document.createElement("div");
+  block.className = "fc-block";
 
-function buildTable(rows) {
+  // FC header
   let html = `
-    <table class="fc-table">
-      <thead>
+    <div class="fc-title" data-fc="${fcCode}">
+      ▶ Amazon FC: ${fcCode} 
+      <span style="font-weight:normal; font-size:13px;">
+        (${state.data.length} SKUs)
+      </span>
+    </div>
+  `;
+
+  // Expanded content
+  if (state.expanded) {
+    const rows = state.data.slice(0, state.visible);
+
+    html += `
+      <table>
         <tr>
           <th>Amazon Seller SKU</th>
           <th>30D Sale</th>
           <th>DRR</th>
-          <th>FC Stock</th>
-          <th>SC</th>
-          <th>Send Qty</th>
-          <th>Recall Qty</th>
+          <th>FC 30D Sale</th>
         </tr>
-      </thead>
-      <tbody>
-  `;
-
-  rows.slice(0, 25).forEach(r => {
-    html += `
-      <tr>
-        <td>${r.sku}</td>
-        <td>${r.total30D ?? 0}</td>
-        <td>${r.drr ?? 0}</td>
-        <td>${r.fcStock ?? 0}</td>
-        <td>${r.sc}</td>
-        <td>${r.sendQty ?? 0}</td>
-        <td>${r.recallQty ?? 0}</td>
-      </tr>
     `;
-  });
 
-  html += `
-      </tbody>
-    </table>
-  `;
+    rows.forEach(r => {
+      html += `
+        <tr>
+          <td>${r.sku}</td>
+          <td>${r.total30D}</td>
+          <td>${r.drr}</td>
+          <td>${r.fc30D || 0}</td>
+        </tr>
+      `;
+    });
 
-  if (rows.length > 25) {
     html += `
-      <div class="fc-note">
-        Showing 25 of ${rows.length} rows
+      </table>
+
+      <div class="fc-actions">
+        <button data-action="show" data-fc="${fcCode}">Show More</button>
+        <button data-action="collapse" data-fc="${fcCode}">Collapse</button>
+        <button data-action="export" data-fc="${fcCode}">Export Current FC</button>
       </div>
     `;
   }
 
-  return html;
+  block.innerHTML = html;
+
+  // Header click → expand / collapse
+  block.querySelector(".fc-title").addEventListener("click", () => {
+    state.expanded = !state.expanded;
+    state.visible = PAGE_SIZE; // reset pagination on toggle
+    renderFCTable(fcCode, state.data);
+  });
+
+  // Button actions (only if expanded)
+  block.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation(); // prevent header toggle
+
+      const action = btn.dataset.action;
+
+      if (action === "show") state.visible += PAGE_SIZE;
+      if (action === "collapse") state.expanded = false;
+      if (action === "export")
+        alert(`Export for ${fcCode} will be enabled in next phase`);
+
+      renderFCTable(fcCode, state.data);
+    });
+  });
+
+  return block;
 }
