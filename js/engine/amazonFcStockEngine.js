@@ -1,7 +1,9 @@
 /**
- * Amazon FC Stock Engine (FINAL – NEVER EMPTY)
- * --------------------------------------------
- * Guarantees FC keys always returned
+ * Amazon FC Stock Engine (FINAL – FC SAFE)
+ * ---------------------------------------
+ * - Correct FC detection
+ * - Removes quoted / numeric-only FCs
+ * - Guarantees readable FC names
  */
 
 const EXCLUDED_FCS = ["XHNF", "QWZ8"];
@@ -22,17 +24,17 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     };
   });
 
-  // Normalize
-  const norm = s =>
+  const normalize = s =>
     String(s || "")
       .replace(/\ufeff/g, "")
+      .replace(/"/g, "")
       .replace(/\s+/g, " ")
       .trim()
       .toLowerCase();
 
   const headers = Object.keys(fbaStockRows[0] || {}).map(h => ({
     raw: h,
-    norm: norm(h)
+    norm: normalize(h)
   }));
 
   const find = keys =>
@@ -42,11 +44,19 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
   const fcKey = find(["location", "warehouse", "fc"]);
   const stockKey = find(["ending warehouse", "ending balance"]);
 
-  if (!skuKey || !fcKey) return {};
+  if (!skuKey || !fcKey) {
+    console.error("FC headers not found", headers);
+    return {};
+  }
 
   fbaStockRows.forEach(row => {
-    const fc = String(row[fcKey] || "").trim();
-    if (!fc || EXCLUDED_FCS.includes(fc)) return;
+    let fc = String(row[fcKey] || "")
+      .replace(/"/g, "")
+      .trim();
+
+    // ❌ Reject numeric-only FCs like "28"
+    if (!fc || /^[0-9]+$/.test(fc)) return;
+    if (EXCLUDED_FCS.includes(fc)) return;
 
     allFcs.add(fc);
 
@@ -59,11 +69,11 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
 
     if (!fcSkuStock[fc]) fcSkuStock[fc] = {};
     if (!isNaN(stock) && stock > 0) {
-      fcSkuStock[fc][sku] = (fcSkuStock[fc][sku] || 0) + stock;
+      fcSkuStock[fc][sku] =
+        (fcSkuStock[fc][sku] || 0) + stock;
     }
   });
 
-  // 🚨 CRITICAL FIX: Always return FC keys
   const result = {};
   allFcs.forEach(fc => {
     const skuStocks = fcSkuStock[fc] || {};
@@ -81,11 +91,17 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
         sc,
         sendQty:
           drr > 0 && sc < TARGET_SC_DAYS
-            ? Math.max(Math.floor(TARGET_SC_DAYS * drr - fcStock), 0)
+            ? Math.max(
+                Math.floor(TARGET_SC_DAYS * drr - fcStock),
+                0
+              )
             : 0,
         recallQty:
           drr > 0 && sc > TARGET_SC_DAYS
-            ? Math.max(Math.floor(fcStock - TARGET_SC_DAYS * drr), 0)
+            ? Math.max(
+                Math.floor(fcStock - TARGET_SC_DAYS * drr),
+                0
+              )
             : 0
       };
     });
