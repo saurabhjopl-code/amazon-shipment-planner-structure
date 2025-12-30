@@ -1,8 +1,10 @@
 /**
- * Amazon FC Stock Engine (STABLE BASELINE – v1.1 RESTORED)
- * -------------------------------------------------------
- * Goal: NEVER return empty due to logic
- * Business rules will be layered later
+ * Amazon FC Stock Engine (v1.1 + SAFE FC FIX)
+ * ------------------------------------------
+ * ONLY CHANGE from v1.1:
+ * - FC is taken strictly from `Location`
+ * - Numeric / junk FCs ignored
+ * - Everything else unchanged
  */
 
 const EXCLUDED_FCS = ["XHNF", "QWZ8"];
@@ -14,7 +16,7 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics = []) {
     return result;
   }
 
-  /* ---------- SKU METRICS MAP ---------- */
+  /* ---------- SKU METRICS MAP (UNCHANGED) ---------- */
   const skuMap = {};
   skuMetrics.forEach(r => {
     skuMap[String(r.sku).trim()] = {
@@ -23,24 +25,33 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics = []) {
     };
   });
 
-  /* ---------- HEADER DETECTION (NON-BLOCKING) ---------- */
-  const normalize = s =>
-    String(s || "").replace(/\ufeff/g, "").trim().toLowerCase();
+  /* ---------- REQUIRED COLUMN ---------- */
+  if (!("Location" in fbaStockRows[0])) {
+    console.warn("FBA Stock: Location column missing");
+    return result;
+  }
 
-  const headers = Object.keys(fbaStockRows[0]);
-  const find = keys =>
-    headers.find(h =>
-      keys.some(k => normalize(h).includes(k))
-    );
+  /* ---------- SKU & STOCK KEYS (v1.1 STYLE) ---------- */
+  const skuKey =
+    "MSKU" in fbaStockRows[0]
+      ? "MSKU"
+      : "Merchant SKU" in fbaStockRows[0]
+      ? "Merchant SKU"
+      : "Seller SKU";
 
-  const skuKey = find(["msku", "sku"]);
-  const fcKey = find(["location", "warehouse", "fc"]);
-  const stockKey = find(["ending", "balance", "available"]);
+  const stockKey =
+    "Ending Warehouse Balance" in fbaStockRows[0]
+      ? "Ending Warehouse Balance"
+      : "Available";
 
-  /* ---------- PROCESS ROWS (NO HARD FILTERS) ---------- */
+  /* ---------- PROCESS ROWS ---------- */
   fbaStockRows.forEach(row => {
-    const fc = String(row[fcKey] || "").trim();
-    if (!fc || EXCLUDED_FCS.includes(fc)) return;
+    const fc = String(row["Location"] || "").trim();
+
+    // 🔒 SAFE FC FIX
+    if (!fc) return;
+    if (/^[0-9]+$/.test(fc)) return; // ignore "28", "32", etc
+    if (EXCLUDED_FCS.includes(fc)) return;
 
     if (!result[fc]) result[fc] = [];
 
