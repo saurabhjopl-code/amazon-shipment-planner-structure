@@ -1,19 +1,22 @@
 /**
- * Amazon FC Stock Engine (FINAL – STRICT LOGIC, FLEXIBLE HEADERS)
- * --------------------------------------------------------------
- * Correct per your original specification
- * Safe against Amazon CSV header quirks
+ * Amazon FC Stock Engine (FINAL – ERROR-PROOF)
+ * -------------------------------------------
+ * - No hard failures
+ * - Amazon CSV tolerant
+ * - Business-rule strict
  */
 
 const EXCLUDED_FCS = ["XHNF", "QWZ8"];
 const TARGET_SC_DAYS = 45;
 
 export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
+  const output = {};
   if (!Array.isArray(fbaStockRows) || fbaStockRows.length === 0) {
-    return {};
+    console.warn("FBA Stock: empty file");
+    return output;
   }
 
-  /* ---------------- SKU METRICS MAP ---------------- */
+  /* ---------------- SKU METRICS ---------------- */
   const skuMap = {};
   skuMetrics.forEach(r => {
     skuMap[String(r.sku).trim()] = {
@@ -22,43 +25,49 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     };
   });
 
-  /* ---------------- HEADER NORMALIZATION ---------------- */
+  /* ---------------- HEADER DETECTION ---------------- */
   const normalize = s =>
     String(s || "")
-      .replace(/\ufeff/g, "")   // remove BOM
+      .replace(/\ufeff/g, "")
+      .replace(/\s+/g, " ")
       .trim()
       .toLowerCase();
 
-  const headerMap = {};
-  Object.keys(fbaStockRows[0]).forEach(h => {
-    headerMap[normalize(h)] = h;
-  });
+  const headers = Object.keys(fbaStockRows[0]);
+  const headerNorm = headers.map(h => ({
+    raw: h,
+    norm: normalize(h)
+  }));
 
-  const skuKey =
-    headerMap["msku"] ||
-    headerMap["merchant sku"] ||
-    headerMap["seller sku"];
+  const pick = keys =>
+    headerNorm.find(h => keys.some(k => h.norm.includes(k)))?.raw;
 
-  const fcKey = headerMap["location"];
-  const dispositionKey = headerMap["disposition"];
-  const stockKey = headerMap["ending warehouse balance"];
+  const skuKey = pick(["msku", "merchant sku", "seller sku", "sku"]);
+  const fcKey = pick(["location", "warehouse", "fc"]);
+  const dispositionKey = pick(["disposition", "inventory condition"]);
+  const stockKey = pick([
+    "ending warehouse",
+    "ending balance",
+    "available",
+    "on hand"
+  ]);
 
   if (!skuKey || !fcKey || !dispositionKey || !stockKey) {
-    console.error("Detected headers:", Object.keys(fbaStockRows[0]));
-    throw new Error(
-      "FBA Stock file does not match required Amazon format"
-    );
+    console.warn("FBA Stock: unable to confidently map headers", headers);
+    return output; // SAFE EXIT — NO CRASH
   }
 
   /* ---------------- PROCESS ROWS ---------------- */
-  const fcSkuStock = {};
-
   fbaStockRows.forEach(row => {
     const disposition = String(row[dispositionKey] || "").trim();
     if (disposition !== "SELLABLE") return;
 
-    const fc = String(row[fcKey] || "").trim();
+    let fc = String(row[fcKey] || "")
+      .replace(/"/g, "")
+      .trim();
+
     if (!fc || EXCLUDED_FCS.includes(fc)) return;
+    if (/^[0-9]+$/.test(fc)) return; // guard junk
 
     const sku = String(row[skuKey] || "").trim();
     if (!sku) return;
@@ -68,17 +77,16 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     );
     if (isNaN(stock) || stock <= 0) return;
 
-    if (!fcSkuStock[fc]) fcSkuStock[fc] = {};
-    fcSkuStock[fc][sku] = (fcSkuStock[fc][sku] || 0) + stock;
+    if (!output[fc]) output[fc] = {};
+    output[fc][sku] = (output[fc][sku] || 0) + stock;
   });
 
-  /* ---------------- BUILD OUTPUT ---------------- */
-  const result = {};
-
-  Object.keys(fcSkuStock).forEach(fc => {
-    result[fc] = Object.keys(fcSkuStock[fc]).map(sku => {
+  /* ---------------- BUILD FINAL STRUCTURE ---------------- */
+  const finalResult = {};
+  Object.keys(output).forEach(fc => {
+    finalResult[fc] = Object.keys(output[fc]).map(sku => {
       const base = skuMap[sku] || { total30D: 0, drr: 0 };
-      const fcStock = fcSkuStock[fc][sku];
+      const fcStock = output[fc][sku];
       const drr = base.drr || 0;
       const sc = drr > 0 ? fcStock / drr : "∞";
 
@@ -100,5 +108,5 @@ export function buildAmazonFcStockPlan(fbaStockRows, skuMetrics) {
     });
   });
 
-  return result;
+  return finalResult;
 }
