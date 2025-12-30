@@ -15,13 +15,12 @@ export function initUploader(onGenerate) {
 
   const generateBtn = document.getElementById("generateBtn");
 
-  // 🔒 NEVER disable button again
+  // Button always visible
   generateBtn.disabled = false;
-  generateBtn.style.display = "inline-block";
 
-  Object.keys(inputs).forEach(key => {
-    inputs[key].addEventListener("change", () => {
-      if (inputs[key].files.length > 0) {
+  function validateInputs() {
+    Object.keys(inputs).forEach(key => {
+      if (inputs[key].files && inputs[key].files.length > 0) {
         statuses[key].textContent = "Validated";
         statuses[key].classList.add("valid");
       } else {
@@ -29,17 +28,26 @@ export function initUploader(onGenerate) {
         statuses[key].classList.remove("valid");
       }
     });
+  }
+
+  // Run validation on load (important!)
+  setTimeout(validateInputs, 0);
+
+  // Also validate on any interaction
+  Object.values(inputs).forEach(input => {
+    input.addEventListener("change", validateInputs);
+    input.addEventListener("click", validateInputs);
   });
 
   generateBtn.onclick = () => {
+    validateInputs();
+
     const missing = Object.keys(inputs).filter(
       k => !inputs[k].files || inputs[k].files.length === 0
     );
 
     if (missing.length > 0) {
-      alert(
-        "Please upload all required files before generating shipment plan."
-      );
+      alert("Please upload all required files before generating shipment plan.");
       return;
     }
 
