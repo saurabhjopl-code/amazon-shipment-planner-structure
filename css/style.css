@@ -61,7 +61,6 @@ button {
 
 button:disabled {
   background: #9ca3af;
-  cursor: not-allowed;
 }
 
 .tabs {
@@ -92,8 +91,18 @@ button:disabled {
   display: block;
 }
 
-.table-actions {
+.fc-block {
+  margin-bottom: 40px;
+}
+
+.fc-title {
+  font-size: 18px;
+  font-weight: bold;
   margin-bottom: 10px;
+}
+
+.fc-actions {
+  margin-top: 10px;
   display: flex;
   gap: 10px;
 }
@@ -106,7 +115,6 @@ table {
 th, td {
   border: 1px solid #ddd;
   padding: 6px;
-  text-align: left;
 }
 
 th {
