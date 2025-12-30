@@ -13,7 +13,6 @@ import { applyFcCapacity } from "./engine/fcCapacityEngine.js";
 import { buildSellerFcPlan } from "./engine/sellerFcEngine.js";
 import { exportAllToExcel } from "./export/exportEngine.js";
 
-/* Final datasets for export */
 let AMAZON_FC_FINAL = {};
 let SELLER_FC_FINAL = [];
 
@@ -31,58 +30,30 @@ document.addEventListener("DOMContentLoaded", () => {
 ================================ */
 
 async function handleGenerate(files) {
-  /* Clear previous output */
   document.getElementById("amazonFcTables").innerHTML = "";
   document.getElementById("sellerFcTable").innerHTML = "";
 
   try {
     /* ---------- AMAZON ALL ORDERS ---------- */
-    const allOrdersText = await files.allOrders.text();
-    const allOrdersRows = parseCSV(allOrdersText);
+    const allOrdersRows = parseCSV(await files.allOrders.text());
     const skuMetrics = attachDRR(
       calculate30DSales(allOrdersRows)
     );
 
-    /* ---------- FBA ORDERS (30D) ---------- */
-    const fbaOrdersText = await files.fbaOrders.text();
-    const fbaOrdersRows = parseCSV(fbaOrdersText);
+    /* ---------- FBA ORDERS ---------- */
+    const fbaOrdersRows = parseCSV(await files.fbaOrders.text());
     const fcDemand = buildFCDemand(fbaOrdersRows);
 
     /* ---------- FBA STOCK ---------- */
-    const fbaStockText = await files.fbaStock.text();
-    const fbaStockRows = parseCSV(fbaStockText);
+    const fbaStockRows = parseCSV(await files.fbaStock.text());
     const amazonFcPlan =
       buildAmazonFcStockPlan(fbaStockRows, skuMetrics);
 
-    /* ---------- UNIWIRE STOCK ---------- */
-    const uniwareText = await files.uniwareStock.text();
-    const uniwareRows = parseCSV(uniwareText);
-
-    /* ---------- SKU MAPPING (STATIC FILE) ---------- */
-    const mappingResponse = await fetch("./data/sku_mapping.csv");
-    if (!mappingResponse.ok) {
-      throw new Error("SKU mapping file not found in /data/");
-    }
-    const mappingText = await mappingResponse.text();
-    const mappingRows = parseCSV(mappingText);
-
-    /* ---------- v1.3 SELLER STOCK ---------- */
-    const sellerStockMap =
-      buildSellerStockMap(uniwareRows, mappingRows);
-
-    /* ---------- v1.4 FC CAPACITY ---------- */
+    /* ---------- AMAZON FC CAPACITY ---------- */
     AMAZON_FC_FINAL =
       applyFcCapacity(
         amazonFcPlan,
         window.FC_CAPACITY || []
-      );
-
-    /* ---------- v1.5 SELLER FC PLAN ---------- */
-    SELLER_FC_FINAL =
-      buildSellerFcPlan(
-        skuMetrics,
-        fcDemand,
-        sellerStockMap
       );
 
     /* ---------- RENDER AMAZON FC ---------- */
@@ -90,19 +61,49 @@ async function handleGenerate(files) {
       renderFCTable(fc, AMAZON_FC_FINAL[fc]);
     });
 
-    /* ---------- RENDER SELLER FC ---------- */
-    renderSellerFcTable(SELLER_FC_FINAL);
+    /* ---------- TRY SELLER FC LOGIC ---------- */
+    let sellerStockMap = null;
+    let sellerFcPlan = [];
+
+    try {
+      const uniwareRows = parseCSV(await files.uniwareStock.text());
+
+      const mappingResponse = await fetch("./data/sku_mapping.csv");
+      if (!mappingResponse.ok) {
+        throw new Error("sku_mapping.csv not found");
+      }
+
+      const mappingRows = parseCSV(await mappingResponse.text());
+
+      sellerStockMap =
+        buildSellerStockMap(uniwareRows, mappingRows);
+
+      sellerFcPlan =
+        buildSellerFcPlan(
+          skuMetrics,
+          fcDemand,
+          sellerStockMap
+        );
+
+      SELLER_FC_FINAL = sellerFcPlan;
+      renderSellerFcTable(SELLER_FC_FINAL);
+
+    } catch (sellerErr) {
+      console.warn("Seller FC skipped:", sellerErr.message);
+      document.getElementById("sellerFcTable").innerHTML =
+        "<p><b>Seller FC not generated:</b> SKU mapping file missing.</p>";
+    }
 
     document.getElementById("exportAllBtn").disabled = false;
 
   } catch (err) {
-    console.error(err);
-    alert("Error generating shipment plan. Check console.");
+    console.error("Generate failed:", err);
+    alert("Error generating shipment plan: " + err.message);
   }
 }
 
 /* ===============================
-   SELLER FC TABLE RENDER
+   SELLER FC TABLE
 ================================ */
 
 function renderSellerFcTable(rows) {
