@@ -2,7 +2,7 @@ import { initUploader } from "./ui/uploader.js";
 import { initTabs } from "./ui/tabs.js";
 import { parseCSV } from "./core/parser.js";
 import { calculate30DSales, attachDRR } from "./core/metrics.js";
-import { buildFCDemand } from "./core/fcDemand.js";
+import { buildFCStock } from "./core/fbaStock.js";
 import { renderFCTable } from "./ui/tables.js";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -14,44 +14,57 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function handleGenerate(files) {
-  const readerAll = new FileReader();
-  const readerFba = new FileReader();
+  const readerOrders = new FileReader();
+  const readerStock = new FileReader();
 
-  readerAll.onload = () => {
-    const allOrders = parseCSV(readerAll.result);
-    const baseSales = attachDRR(calculate30DSales(allOrders));
+  readerOrders.onload = () => {
+    const allOrders = parseCSV(readerOrders.result);
+    const skuMetrics = attachDRR(calculate30DSales(allOrders));
 
-    // Build quick lookup by SKU
+    // SKU lookup
     const skuMap = {};
-    baseSales.forEach(r => {
+    skuMetrics.forEach(r => {
       skuMap[r.sku] = r;
     });
 
-    readerFba.onload = () => {
-      const fbaOrders = parseCSV(readerFba.result);
-      const fcDemand = buildFCDemand(fbaOrders);
+    readerStock.onload = () => {
+      const fbaStockRows = parseCSV(readerStock.result);
+      const fcStock = buildFCStock(fbaStockRows);
 
-      Object.keys(fcDemand).forEach(fc => {
-        // 🔒 ONLY SKUs sold in this FC
-        const fcRows = Object.keys(fcDemand[fc]).map(sku => {
-          const base = skuMap[sku];
-          if (!base) return null;
+      Object.keys(fcStock).forEach(fc => {
+        const fcRows = Object.keys(fcStock[fc]).map(sku => {
+          const base = skuMap[sku] || {
+            sku,
+            total30D: 0,
+            drr: 0
+          };
+
+          const fcQty = fcStock[fc][sku];
+          const sc = base.drr > 0 ? (fcQty / base.drr) : Infinity;
 
           return {
-            ...base,
-            fc30D: fcDemand[fc][sku]
+            sku,
+            total30D: base.total30D,
+            drr: base.drr,
+            fcStock: fcQty,
+            sc: Number(sc.toFixed(1)),
+            sendQty: sc < 45 && base.drr > 0
+              ? Math.max(Math.floor(45 * base.drr - fcQty), 0)
+              : 0,
+            recallQty: sc > 45 && base.drr > 0
+              ? Math.max(Math.floor(fcQty - 45 * base.drr), 0)
+              : 0
           };
-        }).filter(Boolean);
+        });
 
-        // Render FC table with FC-specific rows only
         renderFCTable(fc, fcRows);
       });
 
       document.getElementById("exportAllBtn").disabled = false;
     };
 
-    readerFba.readAsText(files.fbaOrders);
+    readerStock.readAsText(files.fbaStock);
   };
 
-  readerAll.readAsText(files.allOrders);
+  readerOrders.readAsText(files.allOrders);
 }
