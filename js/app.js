@@ -2,6 +2,7 @@ import { initUploader } from "./ui/uploader.js";
 import { initTabs } from "./ui/tabs.js";
 import { parseCSV } from "./core/parser.js";
 import { calculate30DSales, attachDRR } from "./core/metrics.js";
+import { buildFCDemand } from "./core/fcDemand.js";
 import { renderFCTable } from "./ui/tables.js";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -13,18 +14,31 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function handleGenerate(files) {
-  const reader = new FileReader();
+  const readerAll = new FileReader();
+  const readerFba = new FileReader();
 
-  reader.onload = () => {
-    const rows = parseCSV(reader.result);
-    const sales30D = calculate30DSales(rows);
-    const skuMetrics = attachDRR(sales30D);
+  readerAll.onload = () => {
+    const allOrders = parseCSV(readerAll.result);
+    const baseSales = attachDRR(calculate30DSales(allOrders));
 
-    // TEMP single FC placeholder
-    renderFCTable("ALL_FC", skuMetrics);
+    readerFba.onload = () => {
+      const fbaOrders = parseCSV(readerFba.result);
+      const fcDemand = buildFCDemand(fbaOrders);
 
-    document.getElementById("exportAllBtn").disabled = false;
+      Object.keys(fcDemand).forEach(fc => {
+        const fcRows = baseSales.map(skuRow => ({
+          ...skuRow,
+          fc30D: fcDemand[fc][skuRow.sku] || 0
+        }));
+
+        renderFCTable(fc, fcRows);
+      });
+
+      document.getElementById("exportAllBtn").disabled = false;
+    };
+
+    readerFba.readAsText(files.fbaOrders);
   };
 
-  reader.readAsText(files.allOrders);
+  readerAll.readAsText(files.allOrders);
 }
