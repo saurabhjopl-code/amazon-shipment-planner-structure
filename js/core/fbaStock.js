@@ -1,58 +1,69 @@
-export function buildFCStock(rows) {
-  const fcStock = {};
-  const debug = {
-    totalRows: rows.length,
-    detectedHeaders: Object.keys(rows[0] || {}),
-    usedStockKey: null,
-    usedSkuKey: null,
-    usedFcKey: null
+import { initUploader } from "./ui/uploader.js";
+import { initTabs } from "./ui/tabs.js";
+import { parseCSV } from "./core/parser.js";
+import { calculate30DSales, attachDRR } from "./core/metrics.js";
+import { buildFCStock } from "./core/fbaStock.js";
+import { renderFCTable } from "./ui/tables.js";
+
+document.addEventListener("DOMContentLoaded", () => {
+  initUploader(handleGenerate);
+  initTabs();
+});
+
+function handleGenerate(files) {
+  document.getElementById("amazonFcTables").innerHTML = "";
+
+  const readerOrders = new FileReader();
+  const readerStock = new FileReader();
+
+  readerOrders.onload = () => {
+    const allOrders = parseCSV(readerOrders.result);
+    const skuMetrics = attachDRR(calculate30DSales(allOrders));
+
+    const skuMap = {};
+    skuMetrics.forEach(r => (skuMap[r.sku] = r));
+
+    readerStock.onload = () => {
+      const rows = parseCSV(readerStock.result);
+      const { fcStock, debug } = buildFCStock(rows);
+
+      // 🔥 SHOW DEBUG INFO ON SCREEN
+      const debugDiv = document.createElement("pre");
+      debugDiv.style.background = "#fef3c7";
+      debugDiv.style.padding = "12px";
+      debugDiv.style.margin = "12px";
+      debugDiv.textContent =
+        "FBA STOCK DEBUG INFO\n" +
+        JSON.stringify(debug, null, 2);
+
+      document.getElementById("amazonFcTables").appendChild(debugDiv);
+
+      const fcs = Object.keys(fcStock);
+      if (fcs.length === 0) return;
+
+      fcs.forEach(fc => {
+        const rows = Object.keys(fcStock[fc]).map(sku => {
+          const base = skuMap[sku] || { total30D: 0, drr: 0 };
+          const fcQty = fcStock[fc][sku];
+          const sc = base.drr > 0 ? fcQty / base.drr : Infinity;
+
+          return {
+            sku,
+            total30D: base.total30D,
+            drr: base.drr,
+            fcStock: fcQty,
+            sc: sc === Infinity ? "∞" : sc.toFixed(1),
+            sendQty: sc < 45 ? Math.max(Math.floor(45 * base.drr - fcQty), 0) : 0,
+            recallQty: sc > 45 ? Math.max(Math.floor(fcQty - 45 * base.drr), 0) : 0
+          };
+        });
+
+        renderFCTable(fc, rows);
+      });
+    };
+
+    readerStock.readAsText(files.fbaStock);
   };
 
-  if (!rows || rows.length === 0) {
-    return { fcStock: {}, debug };
-  }
-
-  // normalize headers
-  const normalize = s => s.trim().toLowerCase();
-  const headerMap = {};
-  Object.keys(rows[0]).forEach(k => {
-    headerMap[normalize(k)] = k;
-  });
-
-  // extremely tolerant detection
-  const skuKey =
-    headerMap["msku"] ||
-    headerMap["merchant sku"] ||
-    headerMap["sku"];
-
-  const fcKey =
-    headerMap["location"] ||
-    headerMap["location id"] ||
-    headerMap["warehouse"];
-
-  const stockKey =
-    headerMap["ending warehouse balance"] ||
-    headerMap["ending balance"] ||
-    Object.keys(headerMap).find(k => k.includes("ending"));
-
-  debug.usedSkuKey = skuKey;
-  debug.usedFcKey = fcKey;
-  debug.usedStockKey = stockKey;
-
-  if (!skuKey || !fcKey || !stockKey) {
-    return { fcStock: {}, debug };
-  }
-
-  rows.forEach(row => {
-    const sku = String(row[skuKey] || "").trim();
-    const fc = String(row[fcKey] || "").trim();
-    const stock = Number(row[stockKey] || 0);
-
-    if (!sku || !fc || stock <= 0) return;
-
-    if (!fcStock[fc]) fcStock[fc] = {};
-    fcStock[fc][sku] = (fcStock[fc][sku] || 0) + stock;
-  });
-
-  return { fcStock, debug };
+  readerOrders.readAsText(files.allOrders);
 }
