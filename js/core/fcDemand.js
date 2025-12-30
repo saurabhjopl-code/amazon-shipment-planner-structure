@@ -1,3 +1,5 @@
+const EXCLUDED_FCS = ["XHNF", "QWZ8"];
+
 export function buildFCDemand(fbaOrdersRows) {
   const fcDemand = {};
 
@@ -9,6 +11,7 @@ export function buildFCDemand(fbaOrdersRows) {
     const qty = Number(row["Shipped Quantity"] || 0);
 
     if (!sku || !fc || qty <= 0) return;
+    if (EXCLUDED_FCS.includes(fc)) return; // 🔒 FC exclusion
 
     if (!fcDemand[fc]) fcDemand[fc] = {};
     if (!fcDemand[fc][sku]) fcDemand[fc][sku] = 0;
