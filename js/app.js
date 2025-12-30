@@ -21,16 +21,29 @@ function handleGenerate(files) {
     const allOrders = parseCSV(readerAll.result);
     const baseSales = attachDRR(calculate30DSales(allOrders));
 
+    // Build quick lookup by SKU
+    const skuMap = {};
+    baseSales.forEach(r => {
+      skuMap[r.sku] = r;
+    });
+
     readerFba.onload = () => {
       const fbaOrders = parseCSV(readerFba.result);
       const fcDemand = buildFCDemand(fbaOrders);
 
       Object.keys(fcDemand).forEach(fc => {
-        const fcRows = baseSales.map(skuRow => ({
-          ...skuRow,
-          fc30D: fcDemand[fc][skuRow.sku] || 0
-        }));
+        // 🔒 ONLY SKUs sold in this FC
+        const fcRows = Object.keys(fcDemand[fc]).map(sku => {
+          const base = skuMap[sku];
+          if (!base) return null;
 
+          return {
+            ...base,
+            fc30D: fcDemand[fc][sku]
+          };
+        }).filter(Boolean);
+
+        // Render FC table with FC-specific rows only
         renderFCTable(fc, fcRows);
       });
 
